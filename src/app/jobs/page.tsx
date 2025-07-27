@@ -1,201 +1,147 @@
-'use client'
-
-import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { JobCard } from '@/components/jobs/job-card'
-import { JobFilters } from '@/components/jobs/job-filters'
+import { createClient } from '@/lib/supabase/server'
+import { Navbar } from '@/components/layout/navbar'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { useAuth } from '@/lib/hooks/use-auth'
+import { MapPin, Clock, DollarSign, User } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 
-export default function JobsPage() {
-  const [jobs, setJobs] = useState<any[]>([])
-  const [filteredJobs, setFilteredJobs] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<any>({})
-  const { user } = useAuth()
+export default async function JobsPage() {
   const supabase = createClient()
-
-  useEffect(() => {
-    fetchJobs()
-  }, [])
-
-  useEffect(() => {
-    applyFilters()
-  }, [jobs, filters])
-
-  const fetchJobs = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          profiles!jobs_client_id_fkey (
-            first_name,
-            last_name
-          )
-        `)
-        .eq('status', 'published')
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching jobs:', error)
-        return
-      }
-
-      setJobs(data || [])
-    } catch (error) {
-      console.error('Error fetching jobs:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const applyFilters = () => {
-    let filtered = [...jobs]
-
-    // Search filter
-    if (filters.search) {
-      filtered = filtered.filter(job =>
-        job.title.toLowerCase().includes(filters.search.toLowerCase()) ||
-        job.description.toLowerCase().includes(filters.search.toLowerCase())
+  
+  // Get all published jobs with client info
+  const { data: jobs, error } = await supabase
+    .from('jobs')
+    .select(`
+      *,
+      profiles!jobs_client_id_fkey (
+        first_name,
+        last_name
       )
-    }
+    `)
+    .eq('status', 'published')
+    .order('created_at', { ascending: false })
 
-    // Category filter
-    if (filters.category && filters.category !== 'all') {
-      filtered = filtered.filter(job => job.category === filters.category)
-    }
-
-    // Job type filter
-    if (filters.job_type && filters.job_type !== 'all') {
-      filtered = filtered.filter(job => job.job_type === filters.job_type)
-    }
-
-    // Location type filter
-    if (filters.location_type && filters.location_type !== 'all') {
-      filtered = filtered.filter(job => job.location_type === filters.location_type)
-    }
-
-    // Experience level filter
-    if (filters.experience_level && filters.experience_level !== 'all') {
-      filtered = filtered.filter(job => job.experience_level === filters.experience_level)
-    }
-
-    // Skills filter
-    if (filters.skills && filters.skills.length > 0) {
-      filtered = filtered.filter(job =>
-        job.required_skills && job.required_skills.some((skill: string) => filters.skills.includes(skill))
-      )
-    }
-
-    // Budget filter
-    if (filters.budget_min) {
-      filtered = filtered.filter(job => 
-        job.budget_max && job.budget_max >= parseFloat(filters.budget_min)
-      )
-    }
-
-    if (filters.budget_max) {
-      filtered = filtered.filter(job =>
-        job.budget_min && job.budget_min <= parseFloat(filters.budget_max)
-      )
-    }
-
-    setFilteredJobs(filtered)
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading jobs...</p>
-        </div>
-      </div>
-    )
-  }
+  console.log('Jobs query result:', { jobs, error })
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <Link href="/">
-              <h1 className="text-2xl font-bold text-gray-900">
-                🥷 HireDataNinjas
-              </h1>
-            </Link>
-            <div className="flex items-center gap-4">
-              {user ? (
-                <>
-                  <Link href="/dashboard">
-                    <Button variant="outline">Dashboard</Button>
-                  </Link>
-                  <form action="/auth/signout" method="post">
-                    <Button variant="ghost" type="submit">Sign Out</Button>
-                  </form>
-                </>
-              ) : (
-                <>
-                  <Link href="/auth/login">
-                    <Button variant="outline">Login</Button>
-                  </Link>
-                  <Link href="/auth/signup">
-                    <Button>Get Started</Button>
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Find Your Next Data Science Opportunity
-          </h2>
-          <p className="text-gray-600">
-            Browse through {jobs.length} curated data science jobs from top companies
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      
+      <div className="container mx-auto px-4 py-12">
+        {/* Header */}
+        <div className="max-w-2xl mb-12">
+          <h1 className="text-4xl md:text-5xl font-medium tracking-tight mb-4">
+            Data jobs
+          </h1>
+          <p className="text-xl text-muted-foreground">
+            Discover opportunities with leading companies looking for data expertise.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Filters Sidebar */}
-          <div className="lg:col-span-1">
-            <JobFilters onFiltersChange={setFilters} />
+        {/* Debug Info */}
+        {error && (
+          <div className="mb-8 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <p className="text-red-800 dark:text-red-200 text-sm">Error: {error.message}</p>
           </div>
+        )}
 
-          {/* Jobs List */}
-          <div className="lg:col-span-3">
-            {filteredJobs.length > 0 ? (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-600">
-                    Showing {filteredJobs.length} of {jobs.length} jobs
-                  </p>
-                </div>
+        {/* Jobs Grid */}
+        <div className="grid gap-6 max-w-4xl">
+          {jobs && jobs.length > 0 ? (
+            jobs.map((job) => (
+              <Card key={job.id} className="group hover:shadow-md transition-shadow">
+                <CardHeader className="pb-4">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <CardTitle className="text-xl group-hover:text-primary transition-colors">
+                        <Link href={`/jobs/${job.id}`}>
+                          {job.title}
+                        </Link>
+                      </CardTitle>
+                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                        <div className="flex items-center">
+                          <User className="w-4 h-4 mr-1" />
+                          {job.profiles?.first_name} {job.profiles?.last_name}
+                        </div>
+                        <div className="flex items-center">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          {job.location_type} {job.location && ` - ${job.location}`}
+                        </div>
+                        <div className="flex items-center">
+                          <Clock className="w-4 h-4 mr-1" />
+                          {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
+                        </div>
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="ml-4">
+                      {job.job_type}
+                    </Badge>
+                  </div>
+                </CardHeader>
                 
-                <div className="grid gap-4">
-                  {filteredJobs.map((job) => (
-                    <JobCard key={job.id} job={job} />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="text-gray-500">
-                  <p className="text-lg">No jobs found matching your criteria</p>
-                  <p className="text-sm mt-2">Try adjusting your filters or check back later for new opportunities</p>
-                </div>
-              </div>
-            )}
-          </div>
+                <CardContent className="space-y-4">
+                  <CardDescription className="text-base leading-relaxed">
+                    {job.description?.slice(0, 200)}...
+                  </CardDescription>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center text-sm font-medium">
+                        <DollarSign className="w-4 h-4 mr-1" />
+                        {job.budget_type === 'hourly' 
+                          ? `$${job.budget_min}-$${job.budget_max}/hr`
+                          : job.budget_type === 'monthly'
+                          ? `$${job.budget_min?.toLocaleString()}-$${job.budget_max?.toLocaleString()}/month`
+                          : `$${job.budget_min?.toLocaleString()}-$${job.budget_max?.toLocaleString()}`
+                        }
+                      </div>
+                      <Badge variant="outline">
+                        {job.category}
+                      </Badge>
+                    </div>
+                    
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/jobs/${job.id}`}>
+                        View details
+                      </Link>
+                    </Button>
+                  </div>
+                  
+                  {/* Skills */}
+                  {job.required_skills && job.required_skills.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {job.required_skills.slice(0, 4).map((skill: string) => (
+                        <Badge key={skill} variant="secondary" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {job.required_skills.length > 4 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{job.required_skills.length - 4} more
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <div className="text-center py-12">
+              <h3 className="text-lg font-medium mb-2">
+                {error ? 'Error loading jobs' : 'No jobs available yet'}
+              </h3>
+              <p className="text-muted-foreground mb-6">
+                {error ? 'Please try again later.' : 'Be the first to post a data science opportunity.'}
+              </p>
+              <Button asChild>
+                <Link href="/auth/signup/client">Post the first job</Link>
+              </Button>
+            </div>
+          )}
         </div>
-      </main>
+      </div>
     </div>
   )
 }

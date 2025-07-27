@@ -4,143 +4,95 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
 interface ApplicationFormProps {
   jobId: string
-  job: {
-    title: string
-    budget_type: string
-    budget_min?: number
-    budget_max?: number
-  }
+  jobTitle: string
 }
 
-export function ApplicationForm({ jobId, job }: ApplicationFormProps) {
+export function ApplicationForm({ jobId, jobTitle }: ApplicationFormProps) {
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [coverLetter, setCoverLetter] = useState('')
-  const [proposedRate, setProposedRate] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
-    setError('')
 
+    const formData = new FormData(e.currentTarget)
+    
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        setError('You must be logged in to apply')
-        return
-      }
+      if (!user) throw new Error('Not authenticated')
 
       const applicationData = {
         job_id: jobId,
         freelancer_id: user.id,
-        cover_letter: coverLetter,
-        proposed_rate: proposedRate ? parseFloat(proposedRate) : null,
-        status: 'pending',
+        cover_letter: formData.get('cover_letter') as string,
+        proposed_rate: parseFloat(formData.get('proposed_rate') as string),
+        status: 'pending'
       }
 
-      const { error: insertError } = await supabase
+      const { error } = await supabase
         .from('applications')
-        .insert([applicationData])
+        .insert(applicationData)
 
-      if (insertError) {
-        if (insertError.code === '23505') { // Unique constraint violation
-          setError('You have already applied to this job')
-        } else {
-          setError(insertError.message)
-        }
-        return
-      }
+      if (error) throw error
 
-      // Redirect to success page or job detail
-      router.push(`/jobs/${jobId}?applied=true`)
-      router.refresh()
+      // Redirect to dashboard with success message
+      router.push('/dashboard/freelancer?applied=true')
     } catch (error) {
-      setError('An unexpected error occurred')
+      console.error('Error submitting application:', error)
+      alert('Failed to submit application. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <Card className="max-w-2xl mx-auto">
+    <Card>
       <CardHeader>
-        <CardTitle>Apply to: {job.title}</CardTitle>
-        <CardDescription>
-          Tell the client why you're the perfect fit for this project
-        </CardDescription>
+        <CardTitle>Apply for {jobTitle}</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label htmlFor="coverLetter" className="text-sm font-medium">
-              Cover Letter *
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Your Proposed Rate (per hour)
             </label>
-            <Textarea
-              id="coverLetter"
-              value={coverLetter}
-              onChange={(e) => setCoverLetter(e.target.value)}
-              placeholder="Explain your relevant experience, approach to this project, and why you're the best fit..."
-              rows={8}
-              required
-            />
-            <p className="text-xs text-gray-600">
-              Tip: Mention specific skills and experience relevant to this project
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="proposedRate" className="text-sm font-medium">
-              Proposed Rate ($)
-              {job.budget_type === 'hourly' && ' per hour'}
-              {job.budget_type === 'monthly' && ' per month'}
-            </label>
-            <Input
-              id="proposedRate"
-              type="number"
-              value={proposedRate}
-              onChange={(e) => setProposedRate(e.target.value)}
-              placeholder={
-                job.budget_min && job.budget_max 
-                  ? `Suggested: $${job.budget_min} - $${job.budget_max}`
-                  : 'Enter your rate'
-              }
-              min="0"
+            <Input 
+              name="proposed_rate" 
+              type="number" 
               step="0.01"
+              placeholder="e.g. 75.00"
+              required 
             />
-            <p className="text-xs text-gray-600">
-              {job.budget_type === 'fixed' && 'Total project cost'}
-              {job.budget_type === 'hourly' && 'Your hourly rate'}
-              {job.budget_type === 'monthly' && 'Monthly retainer fee'}
+            <p className="text-xs text-muted-foreground mt-1">
+              Enter your hourly rate in USD
             </p>
           </div>
 
-          <div className="flex justify-end space-x-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Submitting...' : 'Submit Application'}
-            </Button>
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Cover Letter
+            </label>
+            <Textarea 
+              name="cover_letter" 
+              placeholder="Tell the client why you're the perfect fit for this role. Highlight your relevant experience and skills..."
+              className="min-h-32"
+              required 
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Make it personal and specific to this job
+            </p>
           </div>
+
+          <Button type="submit" size="lg" disabled={loading} className="w-full">
+            {loading ? 'Submitting Application...' : 'Submit Application'}
+          </Button>
         </form>
       </CardContent>
     </Card>

@@ -4,348 +4,269 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { JOB_CATEGORIES, JOB_TYPES, LOCATION_TYPES, EXPERIENCE_LEVELS, DATA_SCIENCE_SKILLS } from '@/lib/constants'
+import { X } from 'lucide-react'
+
+const categories = [
+  'Data Science',
+  'Machine Learning',
+  'Data Analysis',
+  'Data Engineering',
+  'Business Intelligence',
+  'Statistical Analysis',
+  'Deep Learning',
+  'NLP',
+  'Computer Vision'
+]
+
+const experienceLevels = [
+  'Entry Level (0-2 years)',
+  'Mid Level (2-5 years)', 
+  'Senior Level (5-10 years)',
+  'Expert Level (10+ years)'
+]
+
+const jobTypes = [
+  'Full-time Contract',
+  'Part-time Contract',
+  'Project-based',
+  'Hourly',
+  'Fixed Price'
+]
+
+const locationTypes = ['Remote', 'On-site', 'Hybrid']
+const budgetTypes = ['hourly', 'fixed', 'monthly']
 
 export function JobForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [skills, setSkills] = useState<string[]>([])
+  const [newSkill, setNewSkill] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
-  // Form state
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    category: '',
-    job_type: '',
-    location_type: '',
-    location: '',
-    budget_min: '',
-    budget_max: '',
-    budget_type: 'fixed',
-    experience_level: '',
-    deadline: '',
-    required_skills: [] as string[],
-  })
-
-  const handleSkillToggle = (skill: string) => {
-    setFormData(prev => ({
-      ...prev,
-      required_skills: prev.required_skills.includes(skill)
-        ? prev.required_skills.filter(s => s !== skill)
-        : [...prev.required_skills, skill]
-    }))
+  const addSkill = () => {
+    if (newSkill.trim() && !skills.includes(newSkill.trim())) {
+      setSkills([...skills, newSkill.trim()])
+      setNewSkill('')
+    }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const removeSkill = (skillToRemove: string) => {
+    setSkills(skills.filter(skill => skill !== skillToRemove))
+  }
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
+    const formData = new FormData(e.currentTarget)
+    
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        setError('You must be logged in to post a job')
-        return
-      }
+      if (!user) throw new Error('Not authenticated')
 
       const jobData = {
+        title: formData.get('title') as string,
+        description: formData.get('description') as string,
+        category: formData.get('category') as string,
+        job_type: formData.get('job_type') as string,
+        location_type: formData.get('location_type') as string,
+        location: formData.get('location') as string || null,
+        experience_level: formData.get('experience_level') as string || null,
+        budget_type: formData.get('budget_type') as string,
+        budget_min: parseFloat(formData.get('budget_min') as string),
+        budget_max: parseFloat(formData.get('budget_max') as string),
+        required_skills: skills,
+        deadline: formData.get('deadline') ? new Date(formData.get('deadline') as string).toISOString().split('T')[0] : null,
         client_id: user.id,
-        title: formData.title,
-        description: formData.description,
-        category: formData.category,
-        job_type: formData.job_type,
-        location_type: formData.location_type,
-        location: formData.location || null,
-        budget_min: formData.budget_min ? parseFloat(formData.budget_min) : null,
-        budget_max: formData.budget_max ? parseFloat(formData.budget_max) : null,
-        budget_type: formData.budget_type,
-        experience_level: formData.experience_level,
-        deadline: formData.deadline || null,
-        required_skills: formData.required_skills,
-        status: 'published',
+        status: 'published'
       }
+
+      console.log('Attempting to create job with data:', jobData)
 
       const { data, error } = await supabase
         .from('jobs')
-        .insert([jobData])
+        .insert(jobData)
         .select()
         .single()
 
+      console.log('Supabase response:', { data, error })
+
       if (error) {
-        setError(error.message)
+        console.error('Supabase error:', error)
+        setError(`Database error: ${error.message}`)
         return
       }
 
-      // Redirect to job detail page
-      router.push(`/dashboard/client/jobs/${data.id}`)
-      router.refresh()
-    } catch (error) {
-      setError('An unexpected error occurred')
+      console.log('Job created successfully:', data)
+      router.push(`/jobs/${data.id}`)
+    } catch (error: any) {
+      console.error('Error creating job:', error)
+      setError(`Error: ${error.message}`)
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
-          {error}
-        </div>
-      )}
-
-      {/* Basic Information */}
+    <form onSubmit={handleSubmit}>
       <Card>
         <CardHeader>
           <CardTitle>Job Details</CardTitle>
-          <CardDescription>
-            Provide the basic information about your job posting
-          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="title" className="text-sm font-medium">
-              Job Title *
-            </label>
-            <Input
-              id="title"
-              value={formData.title}
-              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-              placeholder="e.g. Senior Data Scientist for ML Project"
-              required
-            />
-          </div>
+        <CardContent className="space-y-6">
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+              <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+            </div>
+          )}
 
-          <div className="space-y-2">
-            <label htmlFor="description" className="text-sm font-medium">
-              Job Description *
-            </label>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Describe the project, requirements, and expectations..."
-              rows={6}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Category *</label>
-              <Select
-                value={formData.category}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-                required
-              >
+          {/* Basic Info */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium mb-2 block">Job Title</label>
+              <Input name="title" placeholder="e.g. Senior Data Scientist" required />
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Category</label>
+              <Select name="category" required>
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {JOB_CATEGORIES.map(category => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
+                  {categories.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Job Type *</label>
-              <Select
-                value={formData.job_type}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, job_type: value }))}
-                required
-              >
+            <div>
+              <label className="text-sm font-medium mb-2 block">Job Type</label>
+              <Select name="job_type" required>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select job type" />
+                  <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {JOB_TYPES.map(type => (
+                  {jobTypes.map(type => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Location Type</label>
+              <Select name="location_type" required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select location type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {locationTypes.map(type => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Location (optional)</label>
+              <Input name="location" placeholder="e.g. New York, San Francisco" />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Experience Level</label>
+              <Select name="experience_level">
+                <SelectTrigger>
+                  <SelectValue placeholder="Select level" />
+                </SelectTrigger>
+                <SelectContent>
+                  {experienceLevels.map(level => (
+                    <SelectItem key={level} value={level}>{level}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Deadline (optional)</label>
+              <Input name="deadline" type="date" />
+            </div>
+          </div>
+
+          {/* Budget */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Budget</label>
+            <div className="grid md:grid-cols-3 gap-4">
+              <Select name="budget_type" required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Budget type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {budgetTypes.map(type => (
                     <SelectItem key={type} value={type}>
-                      {type}
+                      {type === 'hourly' ? 'Hourly Rate' : type === 'fixed' ? 'Fixed Price' : 'Monthly Rate'}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <Input name="budget_min" type="number" step="0.01" placeholder="Min ($)" required />
+              <Input name="budget_max" type="number" step="0.01" placeholder="Max ($)" required />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Experience Level *</label>
-            <Select
-              value={formData.experience_level}
-              onValueChange={(value) => setFormData(prev => ({ ...prev, experience_level: value }))}
-              required
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select experience level" />
-              </SelectTrigger>
-              <SelectContent>
-                {EXPERIENCE_LEVELS.map(level => (
-                  <SelectItem key={level} value={level}>
-                    {level}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Location & Budget */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Location & Budget</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Work Type *</label>
-              <Select
-                value={formData.location_type}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, location_type: value }))}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select work type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LOCATION_TYPES.map(type => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="location" className="text-sm font-medium">
-                Location {formData.location_type !== 'Remote' && '*'}
-              </label>
-              <Input
-                id="location"
-                value={formData.location}
-                onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                placeholder="e.g. San Francisco, CA"
-                required={formData.location_type !== 'Remote'}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Budget Type</label>
-              <Select
-                value={formData.budget_type}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, budget_type: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="hourly">Hourly Rate</SelectItem>
-                  <SelectItem value="fixed">Fixed Price</SelectItem>
-                  <SelectItem value="monthly">Monthly Retainer</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label htmlFor="budget_min" className="text-sm font-medium">
-                  Budget Min ($)
-                </label>
-                <Input
-                  id="budget_min"
-                  type="number"
-                  value={formData.budget_min}
-                  onChange={(e) => setFormData(prev => ({ ...prev, budget_min: e.target.value }))}
-                  placeholder="1000"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="budget_max" className="text-sm font-medium">
-                  Budget Max ($)
-                </label>
-                <Input
-                  id="budget_max"
-                  type="number"
-                  value={formData.budget_max}
-                  onChange={(e) => setFormData(prev => ({ ...prev, budget_max: e.target.value }))}
-                  placeholder="5000"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="deadline" className="text-sm font-medium">
-              Project Deadline
-            </label>
-            <Input
-              id="deadline"
-              type="date"
-              value={formData.deadline}
-              onChange={(e) => setFormData(prev => ({ ...prev, deadline: e.target.value }))}
+          {/* Description */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Job Description</label>
+            <Textarea 
+              name="description" 
+              placeholder="Describe the role, responsibilities, and what you're looking for..."
+              className="min-h-32"
+              required 
             />
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Required Skills */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Required Skills</CardTitle>
-          <CardDescription>
-            Select the skills required for this job
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {DATA_SCIENCE_SKILLS.map(skill => (
-              <Badge
-                key={skill}
-                variant={formData.required_skills.includes(skill) ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => handleSkillToggle(skill)}
-              >
-                {skill}
-              </Badge>
-            ))}
-          </div>
-          {formData.required_skills.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm text-gray-600">
-                Selected: {formData.required_skills.join(', ')}
-              </p>
+          {/* Skills */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Required Skills</label>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <Input 
+                  value={newSkill}
+                  onChange={(e) => setNewSkill(e.target.value)}
+                  placeholder="Add a skill (e.g. Python, SQL, etc.)"
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
+                />
+                <Button type="button" onClick={addSkill} variant="outline">
+                  Add
+                </Button>
+              </div>
+              {skills.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {skills.map(skill => (
+                    <Badge key={skill} variant="secondary" className="flex items-center gap-1">
+                      {skill}
+                      <X className="w-3 h-3 cursor-pointer" onClick={() => removeSkill(skill)} />
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          <Button type="submit" size="lg" disabled={loading} className="w-full">
+            {loading ? 'Creating Job...' : 'Post Job'}
+          </Button>
         </CardContent>
       </Card>
-
-      {/* Submit Button */}
-      <div className="flex justify-end space-x-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.back()}
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={loading}>
-          {loading ? 'Publishing...' : 'Publish Job'}
-        </Button>
-      </div>
     </form>
   )
 }
